@@ -341,19 +341,19 @@ class LSPFileManager(BaseLeanLSPClient):
 
     def _wait_for_diagnostics(self, uris: list[str], timeout: float = 30) -> list:
         """Wait until file is loaded or an rpc error occurs.
-
+    
         This should only be used right after opening or updating files not to miss any responses.
         Returns either diagnostics or an [{error dict}] for each file.
-
+    
         Checks `waitForDiagnostics` and `fileProgress` for each file.
-
+    
         Sometimes either of these can fail, so we need to check for "rpc errors", "fatal errors" and use a timeout..
         See source for more details.
-
+    
         **Example diagnostics**:
-
+    
         .. code-block:: python
-
+    
             [
             # For each file:
             [
@@ -364,7 +364,7 @@ class LSPFileManager(BaseLeanLSPClient):
                     'range': {'end': {'character': 19, 'line': 13},
                                 'start': {'character': 8, 'line': 13}},
                     'fullRange': {'end': {'character': 19, 'line': 13},
-                                'start': {'character': 8, 'line': 13}}
+                                    'start': {'character': 8, 'line': 13}}
                 },
                 {
                     'message': "unexpected end of input; expected ':'",
@@ -373,16 +373,16 @@ class LSPFileManager(BaseLeanLSPClient):
                     'range': {'end': {'character': 0, 'line': 17},
                                 'start': {'character': 0, 'line': 17}},
                     'fullRange': {'end': {'character': 0, 'line': 17},
-                                'start': {'character': 0, 'line': 17}}
+                                    'start': {'character': 0, 'line': 17}}
                 },
                 # ...
             ], #...
             ]
-
+    
         Args:
             uris (list[str]): List of URIs to wait for diagnostics on.
             timeout (float): Time to wait for diagnostics. Defaults to 30 seconds.
-
+    
         Returns:
             list: List of diagnostic messages or errors.
         """
@@ -393,7 +393,7 @@ class LSPFileManager(BaseLeanLSPClient):
             raise FileNotFoundError(
                 f"Files {missing} are not open. Call open_files first."
             )
-
+    
         # Request waitForDiagnostics for each file
         rid_to_uri = {}
         for uri, path in zip(uris, paths):
@@ -404,12 +404,12 @@ class LSPFileManager(BaseLeanLSPClient):
                 is_notification=False,
             )
             rid_to_uri[rid] = uri
-
+    
         # Use sets for explicit, robust state tracking.
         uris_to_wait_for_response = set(uris)
         uris_to_wait_for_processing = set(uris)
         diagnostics = {}
-
+    
         # Use a polling loop with an absolute deadline for responsive, predictable timeouts.
         start_time = time.time()
         while uris_to_wait_for_response or uris_to_wait_for_processing:
@@ -419,14 +419,14 @@ class LSPFileManager(BaseLeanLSPClient):
                         f"WARNING: `_wait_for_diagnostics` timed out after {timeout} seconds."
                     )
                 break
-
+    
             res = self._read_stdout(timeout=0.01)
             if not res:
                 continue
-
+    
             res_id = res.get("id")
             method = res.get("method")
-
+    
             # Deadlock-prevention: Handle and respond to server-to-client requests.
             if method and res_id is not None:
                 if self.print_warnings:
@@ -446,7 +446,7 @@ class LSPFileManager(BaseLeanLSPClient):
                 self.stdin.write(header + body)
                 self.stdin.flush()
                 continue
-
+    
             # Handle a response to one of our `waitForDiagnostics` requests.
             if res_id is not None:
                 if res_id in rid_to_uri:
@@ -454,17 +454,18 @@ class LSPFileManager(BaseLeanLSPClient):
                     uris_to_wait_for_response.discard(uri)
                     if "error" in res:
                         diagnostics.setdefault(uri, []).append(res)
-                elif self.print_warnings:
-                    print(f"WARNING: Discarding stale response for id={res_id}.")
+                else:
+                    if self.print_warnings:
+                        print(f"WARNING: Discarding stale response for id={res_id}.")
                 continue
-
+    
             # Handle a notification from the server.
             if method == "textDocument/publishDiagnostics":
                 uri = res["params"]["uri"]
                 if uri in uris:
                     diagnostics[uri] = res["params"]["diagnostics"]
                 continue
-
+    
             if method == "$/lean/fileProgress":
                 uri = res["params"]["textDocument"]["uri"]
                 if uri in uris:
@@ -479,13 +480,13 @@ class LSPFileManager(BaseLeanLSPClient):
                             msg = "leanclient: Received LeanFileProgressKind.fatalError."
                             diagnostics[uri] = [{"error": {"message": msg}}]
                 continue
-
+    
             if method in IGNORED_METHODS:
                 continue
-
+    
             if self.print_warnings and res.get("jsonrpc"):
                 print(
                     f"WARNING: Unhandled method: {res.get('method')}. Consider opening an issue on leanclient github."
                 )
-
+    
         return [diagnostics.get(uri, []) for uri in uris]
