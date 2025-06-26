@@ -28,3 +28,9 @@ build-backend = "poetry.core.masonry.api"
 name = "testpypi"
 url = "https://test.pypi.org/legacy/"
 priority = "supplemental"
+
+[tool.pytest.ini_options]
+pythonpath = [
+  ".",
+  "tests",
+]

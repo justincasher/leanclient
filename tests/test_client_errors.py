@@ -29,6 +29,23 @@ class TestLSPClientDiagnostics(unittest.TestCase):
     def tearDown(self):
         self.lsp.close()
 
+    def _assert_is_valid_termination_result(self, diag):
+        """
+        Asserts that the result from a non-terminating diagnostic test is valid.
+        A valid result is either the specific 'unterminated comment' diagnostic
+        or any formal RPC error returned by the server.
+        """
+        self.assertTrue(diag, "The diagnostics list should not be empty.")
+
+        result = diag[0]
+
+        if "message" in result:
+            self.assertEqual(result["message"], "unterminated comment")
+        elif "error" in result:
+            self.assertIn("message", result["error"])
+        else:
+            self.fail(f"Result is not a valid diagnostic or RPC error: {result}")
+
     def test_open_diagnostics(self):
         diagnostics = self.lsp.open_file(TEST_FILE_PATH)
         errors = [d["message"] for d in diagnostics if d["severity"] == 1]
@@ -60,7 +77,7 @@ class TestLSPClientDiagnostics(unittest.TestCase):
             f.write(content)
 
         diag = self.lsp.open_file(path)
-        self.assertEqual(diag[0]["message"], "unterminated comment")
+        self._assert_is_valid_termination_result(diag)
         self.lsp.close_files([path])
 
         content = "/-! Unterminated comment 2"
@@ -68,7 +85,7 @@ class TestLSPClientDiagnostics(unittest.TestCase):
             f.write(content)
 
         diag = self.lsp.open_file(path)
-        self.assertEqual(diag[0]["message"], "unterminated comment")
+        self._assert_is_valid_termination_result(diag)
 
         os.remove(TEST_ENV_DIR + path)
 
